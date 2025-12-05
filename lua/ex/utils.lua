@@ -6,8 +6,7 @@ local M = {}
 M.sep = package.config:sub(1, 1)
 
 -- Cache platform detection
-local uv = vim.uv or vim.loop
-local sysname = uv.os_uname().sysname
+local sysname = vim.uv.os_uname().sysname
 
 ---Check if running on Windows
 ---@return boolean
@@ -100,6 +99,46 @@ end
 ---@return string
 function M.os_sep()
   return M.sep
+end
+
+---Normalize path to absolute path
+---@param path string
+---@return string
+function M.normalize_path(path)
+  return vim.fs.normalize(path)
+end
+
+---Get relative path from cwd
+---@param path string
+---@return string
+function M.relative_path(path)
+  local abs_path = vim.fs.normalize(path)
+  local cwd = vim.uv.cwd()
+  
+  -- Ensure both paths end without separator for comparison
+  if abs_path:sub(-1) == M.sep then
+    abs_path = abs_path:sub(1, -2)
+  end
+  if cwd:sub(-1) == M.sep then
+    cwd = cwd:sub(1, -2)
+  end
+
+  -- If path starts with cwd, make it relative
+  if abs_path:sub(1, #cwd) == cwd then
+    local rel = abs_path:sub(#cwd + 2) -- +2 to skip the separator
+    return rel ~= '' and rel or '.'
+  end
+
+  return abs_path
+end
+
+---Get file extension
+---@param path string
+---@return string
+function M.get_extension(path)
+  local basename = vim.fs.basename(path)
+  local ext = basename:match('%.([^%.]+)$')
+  return ext or ''
 end
 
 return M

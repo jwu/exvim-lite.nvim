@@ -1,7 +1,6 @@
 -- Configuration management module
 
 local utils = require('ex.utils')
-local uv = vim.uv or vim.loop
 
 local M = {}
 
@@ -40,10 +39,10 @@ function M.new_config(file)
 
   -- Use vim.json and vim.uv for file I/O
   local json_str = vim.json.encode(config)
-  local fd = uv.fs_open(file, 'w', 438) -- 438 = 0666 octal
+  local fd = vim.uv.fs_open(file, 'w', 438) -- 438 = 0666 octal
   if fd then
-    uv.fs_write(fd, json_str, -1)
-    uv.fs_close(fd)
+    vim.uv.fs_write(fd, json_str, -1)
+    vim.uv.fs_close(fd)
   else
     utils.error("Failed to create config file: " .. file)
   end
@@ -71,24 +70,24 @@ end
 ---Load configuration from directory
 ---@param dir string Directory containing config.json
 function M.load(dir)
-  local file = vim.fn.fnamemodify(dir .. 'config.json', ':p')
+  local file = utils.normalize_path(dir .. 'config.json')
 
   -- Check if file exists using vim.uv
-  local stat = uv.fs_stat(file)
+  local stat = vim.uv.fs_stat(file)
   if not stat then
     M.new_config(file)
   end
 
   -- Read file using vim.uv
-  local fd = uv.fs_open(file, 'r', 438)
+  local fd = vim.uv.fs_open(file, 'r', 438)
   if not fd then
     utils.error("Failed to open config file: " .. file)
     return
   end
 
-  local stat_result = uv.fs_fstat(fd)
-  local data = uv.fs_read(fd, stat_result.size, 0)
-  uv.fs_close(fd)
+  local stat_result = vim.uv.fs_fstat(fd)
+  local data = vim.uv.fs_read(fd, stat_result.size, 0)
+  vim.uv.fs_close(fd)
 
   if not data then
     utils.error("Failed to read config file: " .. file)
@@ -116,8 +115,8 @@ function M.load(dir)
   local includes = build_rg_globs(conf.includes, false)
   local rg_globs = includes .. ' ' .. ignores
 
-  vim.g.exvim_dir = vim.fn.fnamemodify(dir, ':p')
-  vim.g.exvim_cwd = vim.fn.fnamemodify(dir, ':p:h:h')
+  vim.g.exvim_dir = utils.normalize_path(dir)
+  vim.g.exvim_cwd = vim.fs.dirname(vim.fs.dirname(utils.normalize_path(dir)))
   vim.g.exvim_proj_name = vim.fs.basename(vim.g.exvim_cwd)
 
   vim.api.nvim_set_current_dir(vim.g.exvim_cwd)
@@ -136,7 +135,7 @@ function M.load(dir)
   old_tags = vim.o.tags
   vim.o.tags = old_tags .. ',' .. vim.fn.fnameescape(vim.g.exvim_dir .. 'tags')
 
-  vim.g.ex_project_file = vim.fn.fnamemodify(dir .. 'files.exproject', ':p')
+  vim.g.ex_project_file = utils.normalize_path(dir .. 'files.exproject')
 
   -- Load project filters
   local project = require('ex.project')
@@ -158,14 +157,14 @@ function M.load(dir)
   end
 
   if _G.___bufferline_private ~= nil then
-    vim.fn['show_bufferline']()
+    _G.show_bufferline()
   end
 end
 
 ---Show configuration file
 function M.show()
-  local file = vim.fn.fnamemodify(vim.g.exvim_dir .. 'config.json', ':p')
-  local stat = uv.fs_stat(file)
+  local file = utils.normalize_path(vim.g.exvim_dir .. 'config.json')
+  local stat = vim.uv.fs_stat(file)
   if stat then
     vim.cmd('silent e ' .. vim.fn.escape(file, ' '))
 

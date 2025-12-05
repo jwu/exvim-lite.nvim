@@ -279,21 +279,14 @@ function M.exec(pattern, method)
   confirm_at = -1
 
   print('search ' .. pattern .. '...(smart case)')
-  local cmd = 'rg --no-heading --line-number --smart-case --no-ignore --hidden '
-            .. vim.fn.shellescape(pattern) .. ' ' .. vim.g.ex_search_globs
 
-  -- Use vim.system (Neovim 0.10+) or fallback to vim.fn.system
-  local result
-  if vim.system then
-    local obj = vim.system({'rg', '--no-heading', '--line-number', '--smart-case', '--no-ignore', '--hidden', pattern}, {
-      cwd = vim.fn.getcwd(),
-      text = true,
-    })
-    local output = obj:wait()
-    result = output.stdout or ''
-  else
-    result = vim.fn.system(cmd)
-  end
+  -- Use vim.system (Neovim 0.10+)
+  local obj = vim.system({'rg', '--no-heading', '--line-number', '--smart-case', '--no-ignore', '--hidden', pattern}, {
+    cwd = vim.uv.cwd(),
+    text = true,
+  })
+  local output = obj:wait()
+  local result = output.stdout or ''
 
   M.open_window()
 

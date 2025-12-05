@@ -2,7 +2,6 @@
 
 local utils = require('ex.utils')
 local window = require('ex.window')
-local uv = vim.uv or vim.loop
 
 local M = {}
 
@@ -163,7 +162,7 @@ local function getpath(bufnr, linenr)
   local foldlevel = getfoldlevel(bufnr, linenr)
 
   if foldlevel == 0 then
-    local cwd = vim.fn.getcwd()
+    local cwd = vim.uv.cwd()
     if vim.g.exvim_cwd then
       cwd = vim.g.exvim_cwd
     end
@@ -226,17 +225,17 @@ end
 ---@return number 0 if added, 1 if not added
 local function build_tree(bufnr, path, ignore_pat, include_pat)
   local dirname = vim.fs.basename(path)
-  local stat = uv.fs_stat(path)
+  local stat = vim.uv.fs_stat(path)
   local is_dir = stat and stat.type == 'directory'
 
   if is_dir then
     -- Get directory entries using vim.uv
-    local handle = uv.fs_scandir(path)
+    local handle = vim.uv.fs_scandir(path)
     if not handle then return 1 end
 
     local results = {}
     while true do
-      local name, type = uv.fs_scandir_next(handle)
+      local name, type = vim.uv.fs_scandir_next(handle)
       if not name then break end
       table.insert(results, path .. '/' .. name)
     end
@@ -248,7 +247,7 @@ local function build_tree(bufnr, path, ignore_pat, include_pat)
     local list_last = #results
 
     while list_count < list_last do
-      local result = vim.fn.fnamemodify(results[list_idx], ':p:.')
+      local result = utils.relative_path(results[list_idx])
 
       -- Check ignore patterns
       if vim.fn.match(result, ignore_pat) ~= -1 then
@@ -258,7 +257,7 @@ local function build_tree(bufnr, path, ignore_pat, include_pat)
       end
 
       -- Check include patterns for files
-      local result_stat = uv.fs_stat(result)
+      local result_stat = vim.uv.fs_stat(result)
       if result_stat and result_stat.type ~= 'directory' then
         if vim.fn.match(result, include_pat) == -1 then
           table.remove(results, list_idx)
@@ -331,10 +330,10 @@ local function build_tree(bufnr, path, ignore_pat, include_pat)
     vim.api.nvim_buf_set_lines(bufnr, current_line - 1, current_line - 1, false, {space .. dirname .. end_fold})
     return 0
   else
-    local dir_handle = uv.fs_scandir(path)
+    local dir_handle = vim.uv.fs_scandir(path)
     local is_empty = true
     if dir_handle then
-      local first_entry = uv.fs_scandir_next(dir_handle)
+      local first_entry = vim.uv.fs_scandir_next(dir_handle)
       is_empty = first_entry == nil
     end
 
@@ -567,15 +566,15 @@ function M.confirm_select(modifier)
   local fullpath = getpath(bufnr, cursor_line) .. getname(bufnr, cursor_line)
   vim.api.nvim_win_set_cursor(0, {cursor_line, cursor_col})
 
-  fullpath = vim.fn.fnamemodify(fullpath, ':p')
+  fullpath = utils.normalize_path(fullpath)
   fullpath = vim.fn.fnameescape(fullpath)
 
-  local filetype = vim.fn.fnamemodify(fullpath, ':e')
+  local filetype = utils.get_extension(fullpath)
   if filetype == 'err' or filetype == 'exe' then
     return
   end
 
-  utils.hint(vim.fn.fnamemodify(fullpath, ':p:.'))
+  utils.hint(utils.relative_path(fullpath))
 
   if zoom_in then
     M.toggle_zoom()
@@ -583,8 +582,8 @@ function M.confirm_select(modifier)
 
   window.goto_edit_window()
 
-  local cur_file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ':p')
-  local target_file = vim.fn.fnamemodify(fullpath, ':p')
+  local cur_file = utils.normalize_path(vim.api.nvim_buf_get_name(0))
+  local target_file = utils.normalize_path(fullpath)
   if cur_file ~= target_file then
     vim.cmd('silent ' .. editcmd .. ' ' .. fullpath)
   end
@@ -594,7 +593,7 @@ end
 function M.build_tree()
   level_list = {}
 
-  local cwd = vim.fn.getcwd()
+  local cwd = vim.uv.cwd()
   if vim.g.exvim_cwd then
     cwd = vim.g.exvim_cwd
   end
@@ -627,8 +626,8 @@ function M.find(path)
   end
 
   local filename = vim.fs.basename(path)
-  local filepath = vim.fn.fnamemodify(path, ':p')
-  local stat = uv.fs_stat(filepath)
+  local filepath = utils.normalize_path(path)
+  local stat = vim.uv.fs_stat(filepath)
   local is_dir = stat and stat.type == 'directory'
 
   M.open_window()
@@ -650,7 +649,7 @@ function M.find(path)
         searchfilename = searchfilename .. getname(bufnr, linenr)
       end
 
-      if vim.fn.fnamemodify(searchfilename, ':p') == filepath then
+      if utils.normalize_path(searchfilename) == filepath then
         vim.api.nvim_win_set_cursor(0, {linenr, 0})
         vim.cmd('silent normal! zv')
         vim.cmd('silent normal! zz')
@@ -660,7 +659,7 @@ function M.find(path)
       end
     else
       vim.api.nvim_win_set_cursor(0, {cursor_line, cursor_col})
-      utils.warning('File not found: ' .. vim.fn.fnamemodify(filepath, ':p:.'))
+      utils.warning('File not found: ' .. utils.relative_path(filepath))
       window.goto_edit_window()
       return
     end
@@ -731,7 +730,7 @@ function M.refresh_current_folder()
 
   vim.api.nvim_win_set_cursor(0, {cursor_line, cursor_col})
 
-  full_path_name = vim.fn.fnamemodify(full_path_name, ':p')
+  full_path_name = utils.normalize_path(full_path_name)
   full_path_name = full_path_name:sub(1, -2)
   print('ex-project: Refresh folder: ' .. full_path_name)
 
@@ -860,7 +859,7 @@ function M.newfolder()
     path = '.'
   end
 
-  uv.fs_mkdir(path .. '/' .. foldername, 493) -- 493 = 0755 octal
+  vim.uv.fs_mkdir(path .. '/' .. foldername, 493) -- 493 = 0755 octal
   utils.hint(' created!')
 
   local reg_t = vim.fn.getreg('t')

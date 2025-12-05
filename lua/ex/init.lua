@@ -1,7 +1,5 @@
 -- exvim-lite main module
 
-local uv = vim.uv or vim.loop
-
 local M = {}
 
 M.VERSION = '2.0.0'
@@ -100,11 +98,11 @@ local function barely_start_vim()
   end
 
   local arg0 = vim.fn.argv(0)
-  if vim.fn.findfile(vim.fn.fnamemodify(arg0, ':p')) ~= '' then
+  if vim.fn.findfile(M.utils.normalize_path(arg0)) ~= '' then
     return false
   end
 
-  if vim.fn.fnamemodify(arg0, ':p:h') == vim.fn.fnamemodify(vim.g.exvim_dir, ':p:h:h') then
+  if vim.fs.dirname(M.utils.normalize_path(arg0)) == vim.fs.dirname(vim.fs.dirname(M.utils.normalize_path(vim.g.exvim_dir))) then
     return true
   end
 
@@ -117,7 +115,7 @@ local function find_exvim_folder()
   local found = vim.fs.find('.exvim', {
     upward = true,
     type = 'directory',
-    path = vim.fn.getcwd(),
+    path = vim.uv.cwd(),
   })
 
   if #found == 0 then
@@ -125,7 +123,7 @@ local function find_exvim_folder()
   end
 
   local path = found[1] .. '/'
-  local target = vim.fn.argc() > 0 and vim.fn.fnamemodify(vim.fn.argv(0), ':p') or ''
+  local target = vim.fn.argc() > 0 and M.utils.normalize_path(vim.fn.argv(0)) or ''
 
   M.config.load(path)
 
@@ -145,7 +143,7 @@ end
 ---Create new exvim project
 ---@param dir string Directory path
 function M.new_exvim_project(dir)
-  local path = vim.fn.fnamemodify(dir, ':p')
+  local path = M.utils.normalize_path(dir)
   if path == '' then
     M.utils.error("Can't find path: " .. dir)
     return
@@ -153,10 +151,10 @@ function M.new_exvim_project(dir)
 
   -- Check if .exvim already exists
   local exvim_path = path .. '.exvim'
-  local stat = uv.fs_stat(exvim_path)
+  local stat = vim.uv.fs_stat(exvim_path)
 
   if not stat then
-    uv.fs_mkdir(exvim_path, 493) -- 493 = 0755 octal
+    vim.uv.fs_mkdir(exvim_path, 493) -- 493 = 0755 octal
   end
 
   M.config.load(exvim_path .. '/')
